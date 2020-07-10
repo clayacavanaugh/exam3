@@ -1,0 +1,271 @@
+---
+title: "Exam3"
+author: "Clay Cavanaugh"
+date: "7/9/2020"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, error = TRUE)
+```
+
+1. Clearing the environmment
+```{r}
+rm(list=ls(all=TRUE))
+```
+
+2.TidyCensus package
+
+```{r}
+library(tidycensus)
+census_api_key("6600d5f356e5e45a3774c978db1bd5acd1fbfd3f", install=TRUE, overwrite= TRUE)
+readRenviron("~/.Renviron")
+v15 <- load_variables(year = 2015,
+                      datase = "acs5")
+v10 <- load_variables(year = 2010,
+                      datase = "acs5")
+library(tidyverse)
+inequality_panel <- bind_rows(v10, v15)
+
+estimate <- get_acs(geograph = "state",
+                 variables = c(gini = c("B19083_001")),
+                 year = 2010)
+
+estimate2 <- get_acs(geograph = "state",
+                 variables = c(gini = c("B19083_001")),
+                 year = 2015)
+
+library(tidyverse)
+inequality_panel2 <- bind_rows(estimate, estimate2)
+
+#renaming estimate as gini
+library(data.table)
+setnames(inequality_panel2, "estimate", "gini")
+
+#renaming state as well
+setnames(inequality_panel2, "NAME", "state")
+
+#adding year variable
+
+
+#head command
+head(inequality_panel2)
+```
+
+3. Reshaping the inequality value wide
+
+```{r}
+inequality_wide <- 
+  inequality_panel2 %>%
+  pivot_wider(id_cols = c("GEOID","state", "gini"),
+              names_from ="state",
+              values_from ="gini")
+head(inequality_wide)
+```
+
+4. Reshapping back to long
+
+```{r}
+inequality_long <- 
+  inequality_wide %>%
+  pivot_longer(cols = starts_with("GEOID"),
+               names_to = "state",
+               names_prefix = "state_",
+               values_to = "gini",
+               values_drop_na = FALSE) %>%
+  filter(!(gini==0))
+
+```
+
+5. Showing that both sets have same # of observations
+
+```{r}
+head(inequality_long)
+head(inequality_wide)
+inequality_long
+inequality_wide
+```
+
+6. Collapsing the inequality_long data frame
+
+```{r}
+inequality_collapsed <- 
+  inequality_long %>%
+  group_by(state,year,GEOID,) %>%
+  summarize(across(where(is.numeric), sum)) %>%
+  select(-c("moe"))
+```
+
+7. Producing a map of the United States
+
+```{r}
+# load packages
+library(rio)
+library(tidyverse)
+library(googlesheets4)
+library(labelled)
+library(data.table)
+library(varhandle)
+library(ggrepel)
+library(geosphere)
+library(rgeos)
+library(viridis)
+library(mapview)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(devtools)
+library(rnaturalearthhires) 
+library(raster)
+library(sp)
+library(sf)
+library(Imap)
+library(remotes)
+
+#transform to WGS84
+inequality_long <- st_transform(inequality_long, "+proj=latlong +ellps=WGS84 +datum=WGS84")
+
+#map of the world package
+world <- ne_countries(scale="large", returnclass = "sf")
+
+#US map
+us <- ne_countries(continent = "United States",
+                       scale = "large",
+                       returnclass = "sf")
+
+#final plot
+us_map = ggplot() +
+  geom_sf(data = united_states) +
+  geom_sf(data = sa_nr_collapsed, aes(fill= `Log Value`)) +
+  scale_fill_viridis(option = "viridis")
+  ggtitle("Gini in the United States") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme_void()
+```
+
+8. importing GDP data from wdi
+
+```{r}
+library(WDI)
+gdp_current <- WDI(country= "all",
+                   indicator = c("NY.GDP.PCAP.CD"),
+                   start = 2006, end = 2007, extra = FALSE, cache = NULL)
+```
+
+9. Deflating gdp_current
+
+```{r}
+library(WDI)
+deflator_data = WDI(country = "all",
+                    indicator = "NY.GDP.DEFL.ZS",
+                    start = 2010, end = 2010,
+                    extra = FALSE, cache = NULL)
+gdp_deflated = left_join(x=gdp_current,
+                          y=deflator_data,
+                          by= "country")
+#deflating
+gdp_deflated$deflated_amount = gdp_deflated$current_amount/
+                                (gdp_deflated$deflator/100)
+```
+
+10. The three main components of a shiny app are the user interface, server, and then execution of the app. The user interface involves inputs and outputs, the server involves what R should do with everything you can included in the ouputs. Finally, the execution app runs the app and creates it, and then you can upload it or utillize it. 
+
+11. Reading in pdf file from web
+
+```{r}
+library(pdftools)
+library(tidyr)
+library(tidytext)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+mytext=pdf_text(pdf =
+"https://pdf.usaid.gov/pdf_docs/PA00TNMG.pdf")
+```
+
+12. Converting to data frame called armeniatext
+
+```{r}
+mytext
+armeniatext <- mytext
+armeniatext=as.data.frame(armeniatext)
+armeniatext$page=c(1:65)
+colnames=(armeniatext)[which(names)(armeniatext)=="armeniatext"] <- "text"
+```
+
+13. Tokenizing the data and removing stop words
+
+```{r}
+armeniatext <- armeniatext %>%
+  unnest_tokens(word,text)
+
+data(stop_words)
+armeniatext <- aremniatext %>%
+  anti_join(stop_words)
+```
+
+14. Top 5 most used words in the report 
+
+```{r}
+hqfreq <- armeniatext %>%
+  count(word, sort=TRUE)
+head(hqfreq)
+
+freq= armeniatext %>%
+  group_by(page)
+  count(word, sort=TRUE)
+head(freq)
+```
+
+15. Loading the Billboard hot 100 webpage
+
+```{r}
+library(rvest)
+library(dplyr)
+library(ggplot2)
+hot100page <- "https://www.billboard.com/charts/hot-100"
+hot100exam <- read_html(hot100page)
+hot100exam
+str(hot100exam)
+```
+
+16. Using rvest to obtain all of the nodes in the webpage
+
+```{r}
+body_nodes <- hot100exam %>%
+  html_node("body") %>%
+  html_children()
+body_nodes
+
+body_nodes %>%
+  html_children()
+```
+
+17. Pulling data on rank, artist, title, and last week
+
+```{r}
+rank <- hot100exam %>%
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__rank__number')]") %>%
+  rvest::html_text()
+
+artist <- hot100exam %>%
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__artist')]") %>%
+  rvest::html_text()
+
+title <- hot100exam %>%
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//span[contains(@class,
+                     'chart-element__information__song')]") %>%
+  rvest::html_text()
+
+last_week <- hot100exam %>%
+  rvest::html_nodes('body') %>%
+  xml2::xml_find_all("//button[contains(@class,
+                    'chart-sorter__button')]") %>%
+  rvest::html_text()
+  
+```
+
